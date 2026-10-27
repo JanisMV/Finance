@@ -6,19 +6,15 @@ import warnings
 
 from pathlib import Path
 
-st.write("Fichier courant :", __file__)
-st.write("Répertoire :", Path(__file__).parent)
+BASE_DIR = Path(__file__).parent
 
-st.write(
-"Contenu du dossier :",
-list(Path(__file__).parent.iterdir())
-)
+LOGO = BASE_DIR / "Designer.png"
 
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
     page_title="Finance Analyzer",
-    page_icon="Designer.png",
+    page_icon=str(LOGO),
     layout="wide"
 )
 
