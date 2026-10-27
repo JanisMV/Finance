@@ -4,6 +4,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
 
+from pathlib import Path
+
+st.write("Fichier courant :", __file__)
+st.write("Répertoire :", Path(__file__).parent)
+
+st.write(
+"Contenu du dossier :",
+list(Path(__file__).parent.iterdir())
+)
+
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
