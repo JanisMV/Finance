@@ -3,8 +3,17 @@ import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
+import seaborn as sns
 
 from pathlib import Path
+
+"""
+Ajout Portfolio
+Chercher good meta avec momentum system
+Benchmark MSCI World
+MONTECARLO
+"""
+
 
 BASE_DIR = Path(__file__).parent
 
@@ -132,8 +141,14 @@ if len(
 
 else:
 
-    st.write(
-        st.session_state.tickers
+    tickers_selectionnes = st.multiselect(
+        "Actifs sélectionnés",
+        st.session_state.tickers,
+        default=st.session_state.tickers
+    )
+
+    st.session_state.tickers = (
+        tickers_selectionnes
     )
 
 # ==================================================
@@ -175,12 +190,10 @@ if st.button(
             )
 
             if not data.empty:
-
                 donnees[ticker] = (
                     data["Close"]
                     .squeeze()
                 )
-
         except:
             pass
 
@@ -215,37 +228,33 @@ if len(
     # Courbes brutes
     # --------------------------
 
-    st.header(
-        "Courbes brutes"
-    )
-
     fig, ax = plt.subplots(
         figsize=(10, 5)
     )
 
     for ticker, close in donnees.items():
 
-        ax.plot(
-            close.index,
-            close.values,
-            label=ticker
-        )
+        if isinstance(
+                close,
+                pd.Series
+        ):
+            ax.plot(
+                close.index,
+                close.values,
+                label=ticker
+            )
 
     ax.legend()
 
     ax.grid(True)
 
-    st.pyplot(fig)
+    fig_brut=fig
 
     # --------------------------
     # Base 100
     # --------------------------
 
     if len(donnees) > 1:
-
-        st.header(
-            "Comparaison Base 100"
-        )
 
         date_commune = max(
             serie.index.min()
@@ -277,15 +286,52 @@ if len(
 
         ax.grid(True)
 
-        st.pyplot(fig)
+        fig_base100 = fig
+
+    # --------------------------
+    # Heatmap des corrélations
+    # --------------------------
+
+    if len(donnees) > 1:
+
+        prix = pd.DataFrame(
+            donnees
+        )
+
+        rendements = (
+            prix
+            .pct_change()
+            .dropna()
+        )
+
+        correlation = (
+            rendements
+            .corr()
+        )
+
+        fig, ax = plt.subplots(
+            figsize=(8, 6)
+        )
+
+        sns.heatmap(
+            correlation,
+            annot=True,
+            cmap="RdYlGn",
+            vmin=-1,
+            vmax=1,
+            fmt=".2f",
+            ax=ax
+        )
+
+        ax.set_title(
+            "Corrélation des rendements"
+        )
+
+        fig_corr=fig
 
     # --------------------------
     # Performances annuelles
     # --------------------------
-
-    st.header(
-        "Performances annuelles"
-    )
 
     perf_annuelles = (
         pd.DataFrame()
@@ -356,4 +402,213 @@ if len(
 
     plt.tight_layout()
 
-    st.pyplot(fig)
+    fig_perf=fig
+
+    # --------------------------
+    # Statistiques avancées
+    # --------------------------
+
+    stats = []
+
+    for ticker, close in donnees.items():
+
+        returns = close.pct_change().dropna()
+
+        # CAGR
+        nb_annees = (
+                            close.index[-1] -
+                            close.index[0]
+                    ).days / 365.25
+
+        cagr = (
+                       (close.iloc[-1] / close.iloc[0])
+                       ** (1 / nb_annees)
+                       - 1
+               ) * 100
+
+        # Volatilité annualisée
+        volatilite = (
+                             returns.std()
+                             * (252 ** 0.5)
+                     ) * 100
+
+        # Sharpe Ratio
+        rendement_annuel = (
+                returns.mean()
+                * 252
+        )
+
+        sharpe = (
+                rendement_annuel
+                / (returns.std() * (252 ** 0.5))
+        )
+
+        # Drawdown
+        cumulative_max = close.cummax()
+
+        drawdown = (
+                close / cumulative_max
+                - 1
+        )
+
+        max_drawdown = (
+                           drawdown.min()
+                       ) * 100
+
+        # Sortino Ratio
+
+        downside_returns = (
+            returns[
+                returns < 0
+                ]
+        )
+
+        if len(downside_returns) > 0:
+
+            downside_vol = (
+                    downside_returns.std()
+                    * (252 ** 0.5)
+            )
+
+            sortino = (
+                    rendement_annuel
+                    / downside_vol
+            )
+
+        else:
+
+            sortino = None
+
+        # Calmar Ratio
+
+        calmar = (
+            cagr
+            / abs(max_drawdown)
+            if max_drawdown != 0
+            else None
+        )
+
+        stats.append({
+
+            "Ticker": ticker,
+
+            "CAGR (%)":
+                round(cagr, 2),
+
+            "Volatilité (%)":
+                round(volatilite, 2),
+
+            "Sharpe":
+                round(sharpe, 2),
+
+            "Max Drawdown (%)":
+                round(max_drawdown, 2),
+
+            "Sortino":
+                round(sortino, 2)
+                if sortino is not None
+                else None,
+
+            "Calmar":
+                round(calmar, 2)
+                if calmar is not None
+                else None
+        })
+
+    stats_df = pd.DataFrame(
+        stats
+    )
+
+
+    st.header("Dashboard")
+
+    col1, col2 = st.columns(2)
+
+    if len(donnees) > 1:
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Comparaison en base 100 à la date de création la plus récente")
+            st.pyplot(fig_base100)
+
+        with col2:
+            st.subheader("Corrélations")
+            st.pyplot(fig_corr)
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+
+            titre_col, radio_col = st.columns([2, 5])
+
+            with titre_col:
+                st.subheader("Actif sélectionné")
+
+            with radio_col:
+                st.write("")  # espace vertical
+
+                ticker_selectionne = st.radio(
+                    "",
+                    list(donnees.keys()),
+                    horizontal=True,
+                    label_visibility="collapsed"
+                )
+
+            serie = donnees[
+                ticker_selectionne
+            ]
+
+            fig_indiv, ax = plt.subplots(
+                figsize=(8, 5)
+            )
+
+            ax.plot(
+                serie.index,
+                serie.values,
+                linewidth=2
+            )
+
+            ax.set_title(
+                ticker_selectionne
+            )
+
+            ax.grid(True)
+
+            st.pyplot(fig_indiv)
+
+        with col4:
+
+            st.subheader(
+                "Performances annuelles"
+            )
+
+            st.pyplot(
+                fig_perf
+            )
+
+
+    else:
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            st.subheader("Courbe brute")
+
+            st.pyplot(fig_brut)
+
+        with col2:
+
+            st.subheader("Performances annuelles")
+
+            st.pyplot(fig_perf)
+
+    st.subheader(
+        "Statistiques avancées"
+    )
+
+    st.dataframe(
+        stats_df,
+        use_container_width=True
+    )
